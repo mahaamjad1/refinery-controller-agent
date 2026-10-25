@@ -1,6 +1,6 @@
 # Refinery Controller – Simple AI Agent (Python)
 
-A small AI agent that controls an oil refinery process. It reads sensors,
+An AI agent that controls an oil refinery process. It reads sensors,
 uses Machine Learning to predict what will happen, and chooses actions on
 heaters, valves and pumps. It has a website-style interface.
 
