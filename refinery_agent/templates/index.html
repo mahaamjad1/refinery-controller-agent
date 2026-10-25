@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Refinery Controller</title>
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --muted:#94a3b8;
+          --safe:#22c55e; --warning:#f59e0b; --danger:#ef4444; --accent:#38bdf8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:18px 24px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+  h1 { margin:0; font-size:1.3rem; }
+  main { max-width:1000px; margin:0 auto; padding:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:16px; }
+  .card { background:var(--card); border-radius:10px; padding:14px; }
+  .card h3 { margin:0 0 6px; font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .big { font-size:1.8rem; font-weight:700; }
+  .status { font-weight:700; padding:2px 10px; border-radius:99px; color:#000; display:inline-block; }
+  .safe{background:var(--safe)} .warning{background:var(--warning)} .danger{background:var(--danger)}
+  button { background:var(--accent); color:#00121a; border:0; padding:10px 16px; border-radius:8px; font-weight:700; cursor:pointer; font-size:.95rem; }
+  button.red { background:var(--danger); color:#fff; } button.grey { background:#475569; color:#fff; }
+  .buttons { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  canvas { width:100%; height:200px; background:var(--card); border-radius:10px; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; }
+  th,td { padding:6px 8px; text-align:right; border-bottom:1px solid #334155; } th:first-child,td:first-child{text-align:left}
+  .tablewrap { overflow-x:auto; }
+  .muted { color:var(--muted); font-size:.85rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛢️ Refinery Controller – AI Agent</h1>
+  <span class="muted">Sense → Think (ML) → Act</span>
+</header>
+<main>
+  <div class="buttons">
+    <button id="step">▶ Run 1 step</button>
+    <button id="auto" class="grey">⏵ Auto-run: OFF</button>
+    <button id="disturb" class="red">⚠ Cause a fault</button>
+    <button id="reset" class="grey">↺ Reset</button>
+  </div>
+
+  <h2 style="font-size:1rem">Sensors</h2>
+  <div class="grid">
+    <div class="card"><h3>Temperature</h3><div class="big"><span id="temperature">–</span> °C</div></div>
+    <div class="card"><h3>Pressure</h3><div class="big"><span id="pressure">–</span> bar</div></div>
+    <div class="card"><h3>Flow</h3><div class="big"><span id="flow">–</span> %</div></div>
+    <div class="card"><h3>Impurity</h3><div class="big"><span id="impurity">–</span> ppm</div></div>
+  </div>
+
+  <h2 style="font-size:1rem">Agent decision (last step)</h2>
+  <div class="grid">
+    <div class="card"><h3>Predicted purity</h3><div class="big"><span id="purity">–</span> %</div></div>
+    <div class="card"><h3>Predicted yield</h3><div class="big"><span id="yield">–</span> %</div></div>
+    <div class="card"><h3>Safety</h3><div><span id="safety" class="status">–</span></div></div>
+    <div class="card"><h3>Actuators</h3><div id="acts" class="muted">Heater: – <br>Valve: – <br>Pump: –</div></div>
+  </div>
+
+  <h2 style="font-size:1rem">Temperature &amp; purity over time</h2>
+  <canvas id="chart" width="900" height="200"></canvas>
+
+  <h2 style="font-size:1rem">Log</h2>
+  <div class="card tablewrap"><table id="log">
+    <thead><tr><th>#</th><th>Temp</th><th>Press</th><th>Impur</th><th>Purity</th><th>Yield</th><th>Safety</th><th>Heater</th><th>Valve</th><th>Pump</th></tr></thead>
+    <tbody></tbody></table></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const heaterTxt = {1:"▲ heat up",0:"– hold",[-1]:"▼ cool down"};
+const valveTxt  = {1:"▲ close (pressure up)",0:"– hold",[-1]:"▼ open (pressure down)"};
+const pumpTxt   = {1:"▲ faster",0:"– hold",[-1]:"▼ slower"};
+let timer = null;
+
+function render(data) {
+  for (const k in data.sensors) $(k).textContent = data.sensors[k];
+  const h = data.history, last = h[h.length-1];
+  if (last) {
+    $("purity").textContent = last.purity.toFixed(1);
+    $("yield").textContent = last.yield.toFixed(1);
+    $("safety").textContent = last.safety;
+    $("safety").className = "status " + last.safety;
+    $("acts").innerHTML = `Heater: ${heaterTxt[last.heater]}<br>Valve: ${valveTxt[last.valve]}<br>Pump: ${pumpTxt[last.pump]}`;
+  } else {
+    ["purity","yield","safety"].forEach(i => $(i).textContent = "–");
+    $("safety").className = "status"; $("acts").innerHTML = "Heater: –<br>Valve: –<br>Pump: –";
+  }
+  $("log").querySelector("tbody").innerHTML = h.slice().reverse().map((r,i) =>
+    `<tr><td>${h.length-i}</td><td>${r.temperature}</td><td>${r.pressure}</td><td>${r.impurity}</td>
+     <td>${r.purity.toFixed(1)}</td><td>${r.yield.toFixed(1)}</td>
+     <td><span class="status ${r.safety}">${r.safety}</span></td>
+     <td>${r.heater}</td><td>${r.valve}</td><td>${r.pump}</td></tr>`).join("");
+  draw(h);
+}
+
+function draw(h) {
+  const c = $("chart"), g = c.getContext("2d"); g.clearRect(0,0,c.width,c.height);
+  if (h.length < 2) { g.fillStyle="#94a3b8"; g.fillText("Press 'Run 1 step' a few times…", 20, 30); return; }
+  const line = (key, lo, hi, color) => {
+    g.strokeStyle = color; g.lineWidth = 2; g.beginPath();
+    h.forEach((r,i) => { const x = 20 + i*(c.width-40)/(h.length-1);
+      const y = c.height-20 - (r[key]-lo)/(hi-lo)*(c.height-40);
+      i ? g.lineTo(x,y) : g.moveTo(x,y); }); g.stroke(); };
+  line("temperature", 300, 420, "#f59e0b");
+  line("purity", 60, 100, "#22c55e");
+  g.fillStyle="#f59e0b"; g.fillText("Temperature (300–420 °C)", 20, 14);
+  g.fillStyle="#22c55e"; g.fillText("Purity (60–100 %)", 180, 14);
+}
+
+async function call(path, post=true) {
+  const r = await fetch(path, {method: post ? "POST" : "GET"}); render(await r.json());
+}
+$("step").onclick = () => call("/api/step");
+$("disturb").onclick = () => call("/api/disturb");
+$("reset").onclick = () => call("/api/reset");
+$("auto").onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; $("auto").textContent = "⏵ Auto-run: OFF"; }
+  else { timer = setInterval(() => call("/api/step"), 1000); $("auto").textContent = "⏸ Auto-run: ON"; }
+};
+call("/api/state", false);
+</script>
+</body>
+</html>
